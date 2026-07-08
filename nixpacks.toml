@@ -4,7 +4,9 @@ nixPkgs = ["python311", "python311Packages.pip", "ffmpeg", "cmake", "rustc", "ca
 [phases.install]
 cmds = [
   "python -m venv /app/.venv",
-  "/app/.venv/bin/pip install -r requirements.txt"
+  "/app/.venv/bin/pip install --upgrade pip",
+  "/app/.venv/bin/pip install -r requirements.txt",
+  "/app/.venv/bin/python -c \"import dotenv; print('dotenv ok')\""
 ]
 
 [start]
