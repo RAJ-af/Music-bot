@@ -1,5 +1,5 @@
 python-telegram-bot==21.4
-pytgcalls==2.1.0
+pytgcalls==3.0.0.dev24
 yt-dlp>=2024.1.0
 ffmpeg-python>=0.2.0
 python-dotenv>=1.0.0
