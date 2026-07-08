@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python311", "python311Packages.pip", "ffmpeg", "cmake", "rustc", "cargo", "opus", "libvpx", "pkg-config"]
+nixPkgs = ["python311", "python311Packages.pip", "ffmpeg", "cmake", "rustc", "cargo", "opus", "libvpx", "pkg-config", "openssl"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
