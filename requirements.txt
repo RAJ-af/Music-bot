@@ -1,0 +1,9 @@
+python-telegram-bot==21.4
+pytgcalls==3.0.0.dev24
+yt-dlp>=2024.1.0
+ffmpeg-python>=0.2.0
+python-dotenv>=1.0.0
+spotdl>=4.6.0
+ytmusicapi>=1.5.0
+pyrogram>=2.0
+tgcrypto>=1.2.0
