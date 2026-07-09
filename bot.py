@@ -46,7 +46,7 @@ class MusicBot:
         self.ytmusic = YTMusic()
         self.userbot = None
 
-        yt_dlp.utils.bug_reports_message = lambda: ""
+        yt_dlp.utils.bug_reports_message = lambda **kwargs: ""
 
         self.ydl_opts = {
             "format": "bestaudio/best",

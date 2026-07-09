@@ -1,5 +1,5 @@
 python-telegram-bot==21.4
-yt-dlp>=2024.1.0
+yt-dlp==2025.06.09
 ffmpeg-python>=0.2.0
 python-dotenv>=1.0.0
 spotdl>=4.5.0
