@@ -107,9 +107,12 @@ class MusicBot:
         self.call_client = PyTgCalls(self.userbot)
         await self.call_client.start()
 
-        self.call_client.on_kicked(self.on_kicked)
-        self.call_client.on_closed_voice_chat(self.on_voice_chat_closed)
-        self.call_client.on_stream_end(self.on_stream_end)
+        if hasattr(self.call_client, 'on_kicked'):
+            self.call_client.on_kicked(self.on_kicked)
+        if hasattr(self.call_client, 'on_closed_voice_chat'):
+            self.call_client.on_closed_voice_chat(self.on_voice_chat_closed)
+        if hasattr(self.call_client, 'on_stream_end'):
+            self.call_client.on_stream_end(self.on_stream_end)
 
     async def on_kicked(self, _, chat_id: int):
         logger.info(f"Bot kicked from voice chat {chat_id}")
