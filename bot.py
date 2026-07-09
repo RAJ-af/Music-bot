@@ -58,20 +58,45 @@ class MusicBot:
         }
 
     async def _ensure_session_string(self):
-        """Get session string from env or file, fail if not set"""
+        """Get session string from env or file, validate and fail if not set"""
+        import base64
+
+        def is_valid_session_string(s: str) -> bool:
+            try:
+                base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+                return True
+            except Exception:
+                return False
+
         if SESSION_STRING:
-            return SESSION_STRING
+            if is_valid_session_string(SESSION_STRING):
+                return SESSION_STRING
+            else:
+                logger.error("SESSION_STRING is invalid (not valid base64)")
+                raise RuntimeError(
+                    "SESSION_STRING is invalid. Generate a new one:\n"
+                    "python -c \"import asyncio; from pyrogram import Client; "
+                    "async def gen(): "
+                    "app=Client('userbot', api_id=32523825, api_hash='77f5ee6cdc3f9b9cd8884b01c7f2268d'); "
+                    "await app.start(); print(await app.export_session_string()); await app.stop() "
+                    "asyncio.run(gen())\"\n"
+                    "Run this in Railway Shell, then add output as SESSION_STRING in Variables."
+                )
 
         if SESSION_FILE.exists():
-            return SESSION_FILE.read_text().strip()
+            session = SESSION_FILE.read_text().strip()
+            if is_valid_session_string(session):
+                return session
 
         # On Railway/headless, fail with clear message
         raise RuntimeError(
-            "SESSION_STRING not set. Generate locally:\n"
-            "python -c \"from pyrogram import Client; "
+            "SESSION_STRING not set. Generate in Railway Shell:\n"
+            "python -c \"import asyncio; from pyrogram import Client; "
+            "async def gen(): "
             "app=Client('userbot', api_id=32523825, api_hash='77f5ee6cdc3f9b9cd8884b01c7f2268d'); "
-            "app.start(); print(app.export_session_string()); app.stop()\"\n"
-            "Then add output as SESSION_STRING in Railway Variables."
+            "await app.start(); print(await app.export_session_string()); await app.stop() "
+            "asyncio.run(gen())\"\n"
+            "Copy output → Railway Variables → SESSION_STRING → Redeploy."
         )
 
     async def initialize(self):
@@ -466,7 +491,11 @@ class MusicBot:
 
 async def main():
     bot = MusicBot()
-    await bot.run()
+    try:
+        await bot.run()
+    except RuntimeError as e:
+        logger.error(str(e))
+        return
 
 
 if __name__ == "__main__":
