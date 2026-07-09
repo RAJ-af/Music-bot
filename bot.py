@@ -553,7 +553,17 @@ class MusicBot:
             BotCommand("volume", "Set volume level (1-100)")
         ])
         logger.info("Bot started with command menu set!")
-        await self.app.run_polling(allowed_updates=Update.ALL_TYPES)
+        try:
+            await self.app.initialize()
+            await self.app.start()
+            await self.app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+            # yahan pyrogram/pytgcalls ka initialize bhi already ho chuka hoga
+            # ab bot ko zinda rakhne ke liye:
+            await asyncio.Event().wait()  # ya jo bhi existing idle mechanism hai (pyrogram ka idle() bhi chalega agar already import hai)
+        finally:
+            await self.app.updater.stop()
+            await self.app.stop()
+            await self.app.shutdown()
 
 
 async def main():
