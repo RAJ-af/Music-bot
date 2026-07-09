@@ -58,22 +58,21 @@ class MusicBot:
         }
 
     async def _ensure_session_string(self):
-        """Auto-generate session string if not exists"""
+        """Get session string from env or file, fail if not set"""
         if SESSION_STRING:
             return SESSION_STRING
 
         if SESSION_FILE.exists():
             return SESSION_FILE.read_text().strip()
 
-        logger.info("Generating session string...")
-        temp_client = Client("userbot", api_id=API_ID, api_hash=API_HASH)
-        await temp_client.start()
-        session = await temp_client.export_session_string()
-        await temp_client.stop()
-
-        SESSION_FILE.write_text(session)
-        logger.info("Session string generated and saved")
-        return session
+        # On Railway/headless, fail with clear message
+        raise RuntimeError(
+            "SESSION_STRING not set. Generate locally:\n"
+            "python -c \"from pyrogram import Client; "
+            "app=Client('userbot', api_id=32523825, api_hash='77f5ee6cdc3f9b9cd8884b01c7f2268d'); "
+            "app.start(); print(app.export_session_string()); app.stop()\"\n"
+            "Then add output as SESSION_STRING in Railway Variables."
+        )
 
     async def initialize(self):
         session = await self._ensure_session_string()
