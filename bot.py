@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -317,20 +317,70 @@ class MusicBot:
             await msg.edit_text(f"➕ Added to queue: {title}")
 
     async def start_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(
-            "🎵 Music Bot Ready!\n\n"
-            "Sources: YouTube, YouTube Music, Spotify\n\n"
-            "Commands:\n"
-            "/play <song name or URL> - Play music in voice chat\n"
-            "/search <query> - Search and select from results\n"
-            "/skip - Skip current track\n"
-            "/queue - Show queue\n"
-            "/stop - Stop and leave voice chat\n"
-            "/pause - Pause playback\n"
-            "/resume - Resume playback\n"
-            "/volume <1-100> - Set volume\n\n"
-            "Supports: YouTube URLs, Spotify URLs, YouTube Music URLs, or just search by name!"
-        )
+        chat_type = update.effective_chat.type
+        if chat_type == "private":
+            await update.message.reply_text(
+                "👋 Hello! I'm your Music Bot! 🎵\n\n"
+                "I can play music in voice chats from YouTube, YouTube Music, and Spotify!\n\n"
+                "**What I can do:**\n"
+                "🎵 Play songs from YouTube, YouTube Music, and Spotify\n"
+                "🔍 Search for music and let you pick from results\n"
+                "⏭️ Skip tracks, view queue, control playback\n"
+                "🔊 Adjust volume between 1-100%\n\n"
+                "**To get started:**\n"
+                "1. Add me to your Telegram group\n"
+                "2. Promote me to admin with 'Voice Chat' permissions\n"
+                "3. Start a voice chat in your group\n"
+                "4. Use `/play <song name or URL>` to start playing!\n\n"
+                "Use /help to see all available commands!"
+            )
+        else:
+            await update.message.reply_text(
+                "🎵 Music Bot is ready! Use /play <song name or URL> to start playing music in this voice chat.\n"
+                "Use /help to see all available commands."
+            )
+
+    async def help_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_type = update.effective_chat.type
+        if chat_type == "private":
+            await update.message.reply_text(
+                "🎵 **Music Bot Help**\n\n"
+                "I can play music in voice chats from YouTube, YouTube Music, and Spotify!\n\n"
+                "**Available Commands:**\n"
+                "/start - Start the bot and see welcome message\n"
+                "/help - Show this help message\n"
+                "/play <song name or URL> - Play music in voice chat\n"
+                "/search <query> - Search for songs and select from results\n"
+                "/skip - Skip the current track\n"
+                "/queue - Show the current song queue\n"
+                "/stop - Stop playback and leave voice chat\n"
+                "/pause - Pause the current playback\n"
+                "/resume - Resume paused playback\n"
+                "/volume <1-100> - Set volume level\n\n"
+                "**Supported Sources:**\n"
+                "• YouTube: youtube.com/watch?v=..., youtu.be/...\n"
+                "• YouTube Music: music.youtube.com/watch?v=...\n"
+                "• Spotify: spotify.com/track/..., spotify.com/album/..., spotify.com/playlist/...\n"
+                "• Search: Just type song name or artist\n\n"
+                "**How to Use:**\n"
+                "1. Add me to your group\n"
+                "2. Start a voice chat in the group\n"
+                "3. Use /play <song name or URL> to start playing\n"
+                "4. Use other commands to control playback\n\n"
+                "Note: The bot requires a user account with voice chat permissions to join and play in voice chats."
+            )
+        else:
+            await update.message.reply_text(
+                "🎵 Music Bot Commands:\n"
+                "/play <song> - Play music\n"
+                "/search <query> - Search songs\n"
+                "/skip - Skip track\n"
+                "/queue - Show queue\n"
+                "/stop - Stop and leave\n"
+                "/pause - Pause playback\n"
+                "/resume - Resume playback\n"
+                "/volume <1-100> - Set volume"
+            )
 
     async def play_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -475,6 +525,7 @@ class MusicBot:
 
     def setup_handlers(self):
         self.app.add_handler(CommandHandler("start", self.start_cmd))
+        self.app.add_handler(CommandHandler("help", self.help_cmd))
         self.app.add_handler(CommandHandler("play", self.play_cmd))
         self.app.add_handler(CommandHandler("search", self.search_cmd))
         self.app.add_handler(CommandHandler("skip", self.skip_cmd))
@@ -488,18 +539,26 @@ class MusicBot:
     async def run(self):
         await self.initialize()
         self.setup_handlers()
-        logger.info("Bot started!")
+        # Set bot commands menu
+        await self.app.bot.set_my_commands([
+            BotCommand("start", "Start the bot and see welcome message"),
+            BotCommand("help", "Get help and list of available commands"),
+            BotCommand("play", "Play a song from YouTube, Spotify, or YouTube Music"),
+            BotCommand("search", "Search for songs and select from results"),
+            BotCommand("skip", "Skip the current track"),
+            BotCommand("queue", "View the current song queue"),
+            BotCommand("stop", "Stop playback and leave voice chat"),
+            BotCommand("pause", "Pause the current playback"),
+            BotCommand("resume", "Resume paused playback"),
+            BotCommand("volume", "Set volume level (1-100)")
+        ])
+        logger.info("Bot started with command menu set!")
         await self.app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 async def main():
     bot = MusicBot()
-    try:
-        await bot.run()
-    except RuntimeError as e:
-        logger.error(str(e))
-        logger.info("Container waiting for shell access... (fix SESSION_STRING in Railway Variables)")
-        await asyncio.Event().wait()  # Wait forever
+    await bot.run()
 
 
 if __name__ == "__main__":
