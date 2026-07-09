@@ -495,7 +495,8 @@ async def main():
         await bot.run()
     except RuntimeError as e:
         logger.error(str(e))
-        return
+        logger.info("Container waiting for shell access... (fix SESSION_STRING in Railway Variables)")
+        await asyncio.Event().wait()  # Wait forever
 
 
 if __name__ == "__main__":
