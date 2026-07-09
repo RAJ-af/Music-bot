@@ -14,7 +14,7 @@ from telegram.ext import (
     ContextTypes,
 )
 from pytgcalls import PyTgCalls
-from pytgcalls.types import AudioPiped
+from pytgcalls.types import MediaStream
 import yt_dlp
 from ytmusicapi import YTMusic
 from pyrogram import Client
@@ -107,7 +107,7 @@ class MusicBot:
             await self.play_audio(chat_id, next_track["url"], next_track["title"], next_track["duration"])
         else:
             self.current_streams.pop(chat_id, None)
-            await self.call_client.leave_call(chat_id)
+            await self.call_client.leave(chat_id)
 
     def _detect_source(self, query: str) -> str:
         if YT_REGEX.search(query):
@@ -210,10 +210,7 @@ class MusicBot:
 
     async def play_audio(self, chat_id: int, stream_url: str, title: str, duration: int):
         try:
-            await self.call_client.join_call(
-                chat_id,
-                AudioPiped(stream_url, audio_parameters=AudioPiped.HighQualityAudio()),
-            )
+            await self.call_client.play(chat_id, MediaStream(stream_url))
             self.current_streams[chat_id] = {"title": title, "duration": duration}
             return True
         except Exception as e:
@@ -385,7 +382,12 @@ class MusicBot:
     async def skip_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         if chat_id in self.current_streams:
-            await self.call_client.change_stream(chat_id)
+            if chat_id in self.queue and self.queue[chat_id]:
+                next_track = self.queue[chat_id].pop(0)
+                await self.play_audio(chat_id, next_track["url"], next_track["title"], next_track["duration"])
+            else:
+                self.current_streams.pop(chat_id, None)
+                await self.call_client.leave(chat_id)
             await update.message.reply_text("⏭ Skipped")
         else:
             await update.message.reply_text("Nothing playing")
@@ -410,13 +412,13 @@ class MusicBot:
         chat_id = update.effective_chat.id
         self.current_streams.pop(chat_id, None)
         self.queue.pop(chat_id, None)
-        await self.call_client.leave_call(chat_id)
+        await self.call_client.leave(chat_id)
         await update.message.reply_text("⏹ Stopped and left voice chat")
 
     async def pause_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         if chat_id in self.current_streams:
-            await self.call_client.pause_call(chat_id)
+            await self.call_client.pause(chat_id)
             await update.message.reply_text("⏸ Paused")
         else:
             await update.message.reply_text("Nothing playing")
@@ -424,7 +426,7 @@ class MusicBot:
     async def resume_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         if chat_id in self.current_streams:
-            await self.call_client.resume_call(chat_id)
+            await self.call_client.resume(chat_id)
             await update.message.reply_text("▶️ Resumed")
         else:
             await update.message.reply_text("Nothing playing")
@@ -439,7 +441,7 @@ class MusicBot:
 
         chat_id = update.effective_chat.id
         if chat_id in self.current_streams:
-            await self.call_client.change_volume_call(chat_id, vol)
+            await self.call_client.set_volume(chat_id, vol)
             await update.message.reply_text(f"🔊 Volume set to {vol}%")
         else:
             await update.message.reply_text("Nothing playing")
