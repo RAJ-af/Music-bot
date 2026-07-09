@@ -46,7 +46,11 @@ class MusicBot:
         self.ytmusic = YTMusic()
         self.userbot = None
 
+        yt_dlp_version = yt_dlp.version.__version__
+        logger.info(f"yt-dlp version: {yt_dlp_version}")
+        logger.info(f"bug_reports_message before: {yt_dlp.utils.bug_reports_message}")
         yt_dlp.utils.bug_reports_message = lambda **kwargs: ""
+        logger.info(f"bug_reports_message after: {yt_dlp.utils.bug_reports_message}")
 
         self.ydl_opts = {
             "format": "bestaudio/best",
