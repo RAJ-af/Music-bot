@@ -232,7 +232,7 @@ class MusicBot:
                     return best_audio["url"], info.get("title"), info.get("duration", 0)
                 return info.get("url"), info.get("title"), info.get("duration", 0)
             except Exception as e:
-                logger.error(f"Stream URL error: {e}")
+                logger.error(f"Stream URL error for {video_url}: {e}")
                 return None, None, 0
 
     async def play_audio(self, chat_id: int, stream_url: str, title: str, duration: int):
