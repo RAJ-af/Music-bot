@@ -76,6 +76,42 @@ class MusicBot:
             "ignoreerrors": True,
         }
 
+        # YouTube cookies support (Netscape format or JSON from env var)
+        youtube_cookies = os.getenv("YOUTUBE_COOKIES")
+        if youtube_cookies:
+            import tempfile
+            cookie_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+
+            # Convert JSON to Netscape format if needed
+            youtube_cookies = youtube_cookies.strip()
+            if youtube_cookies.startswith('['):
+                try:
+                    cookies = json.loads(youtube_cookies)
+                    # Write Netscape format header
+                    cookie_file.write("# Netscape HTTP Cookie File\n")
+                    for cookie in cookies:
+                        domain = cookie.get("domain", ".youtube.com")
+                        # Ensure domain starts with dot for Netscape format
+                        if not domain.startswith('.'):
+                            domain = '.' + domain
+                        path = cookie.get("path", "/")
+                        secure = "TRUE" if cookie.get("secure") else "FALSE"
+                        http_only = "TRUE" if cookie.get("httpOnly") else "FALSE"
+                        expiration = str(int(cookie.get("expirationDate", 0))) if cookie.get("expirationDate") else "0"
+                        name = cookie.get("name", "")
+                        value = cookie.get("value", "")
+                        cookie_file.write(f"{domain}\tTRUE\t{path}\t{secure}\t{expiration}\t{name}\t{value}\n")
+                    logger.info(f"YouTube cookies loaded: {len(cookies)} cookies converted to Netscape format")
+                except json.JSONDecodeError:
+                    cookie_file.write(youtube_cookies)
+                    logger.info("YouTube cookies loaded as raw Netscape format")
+            else:
+                cookie_file.write(youtube_cookies)
+                logger.info("YouTube cookies loaded as raw Netscape format")
+
+            cookie_file.close()
+            self.ydl_opts["cookiefile"] = cookie_file.name
+
         # FastAPI app for Render health checks
         self.web_app = FastAPI(lifespan=self._lifespan)
 
