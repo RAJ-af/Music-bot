@@ -111,26 +111,40 @@ class MusicBot:
         self.call_client = PyTgCalls(self.userbot)
         await self.call_client.start()
 
-        if hasattr(self.call_client, 'on_kicked'):
-            self.call_client.on_kicked(self.on_kicked)
-        if hasattr(self.call_client, 'on_closed_voice_chat'):
-            self.call_client.on_closed_voice_chat(self.on_voice_chat_closed)
-        if hasattr(self.call_client, 'on_stream_end'):
-            self.call_client.on_stream_end(self.on_stream_end)
+        # Use generic on_update handler for PyTgCalls v2.3.3+
+        self.call_client.on_update(self._handle_update)
 
-    async def on_kicked(self, _, chat_id: int):
-        logger.info(f"Bot kicked from voice chat {chat_id}")
-        self.current_streams.pop(chat_id, None)
-        self.queue.pop(chat_id, None)
+    async def _handle_update(self, update):
+        """Handle PyTgCalls v2.3.3+ updates via generic on_update handler"""
+        from pytgcalls.types.chats import ChatUpdate, UpdatedGroupCallParticipant
+        from pytgcalls.types.stream import StreamEnded
 
-    async def on_voice_chat_closed(self, _, chat_id: int):
-        logger.info(f"Voice chat closed in {chat_id}")
-        self.current_streams.pop(chat_id, None)
-        self.queue.pop(chat_id, None)
+        if isinstance(update, ChatUpdate):
+            chat_id = update.chat_id
+            if update.status & ChatUpdate.Status.KICKED:
+                logger.info(f"Bot kicked from voice chat {chat_id}")
+            elif update.status & ChatUpdate.Status.LEFT_GROUP:
+                logger.info(f"Bot left group {chat_id}")
+            elif update.status & ChatUpdate.Status.CLOSED_VOICE_CHAT:
+                logger.info(f"Voice chat closed in {chat_id}")
+            elif update.status & ChatUpdate.Status.DISCARDED_CALL:
+                logger.info(f"Call discarded in {chat_id}")
+            elif update.status & ChatUpdate.Status.LEFT_CALL:
+                logger.info(f"Left call in {chat_id}")
 
-    async def on_stream_end(self, _, chat_id: int):
-        logger.info(f"Stream ended in {chat_id}")
-        await self.play_next(chat_id)
+            # For all left/kicked/closed scenarios, clear state
+            if update.status & ChatUpdate.Status.LEFT_CALL:
+                self.current_streams.pop(chat_id, None)
+                self.queue.pop(chat_id, None)
+
+        elif isinstance(update, StreamEnded):
+            chat_id = update.chat_id
+            logger.info(f"Stream ended in {chat_id}")
+            await self.play_next(chat_id)
+
+        elif isinstance(update, UpdatedGroupCallParticipant):
+            # Optional: track participant join/leave
+            pass
 
     async def play_next(self, chat_id: int):
         if chat_id in self.queue and self.queue[chat_id]:
@@ -138,7 +152,7 @@ class MusicBot:
             await self.play_audio(chat_id, next_track["url"], next_track["title"], next_track["duration"])
         else:
             self.current_streams.pop(chat_id, None)
-            await self.call_client.leave(chat_id)
+            await self.call_client.leave_call(chat_id)
 
     def _detect_source(self, query: str) -> str:
         if YT_REGEX.search(query):
@@ -468,7 +482,7 @@ class MusicBot:
                 await self.play_audio(chat_id, next_track["url"], next_track["title"], next_track["duration"])
             else:
                 self.current_streams.pop(chat_id, None)
-                await self.call_client.leave(chat_id)
+                await self.call_client.leave_call(chat_id)
             await update.message.reply_text("⏭ Skipped")
         else:
             await update.message.reply_text("Nothing playing")
@@ -493,7 +507,7 @@ class MusicBot:
         chat_id = update.effective_chat.id
         self.current_streams.pop(chat_id, None)
         self.queue.pop(chat_id, None)
-        await self.call_client.leave(chat_id)
+        await self.call_client.leave_call(chat_id)
         await update.message.reply_text("⏹ Stopped and left voice chat")
 
     async def pause_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -522,7 +536,7 @@ class MusicBot:
 
         chat_id = update.effective_chat.id
         if chat_id in self.current_streams:
-            await self.call_client.set_volume(chat_id, vol)
+            await self.call_client.change_volume_call(chat_id, vol)
             await update.message.reply_text(f"🔊 Volume set to {vol}%")
         else:
             await update.message.reply_text("Nothing playing")
