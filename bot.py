@@ -294,6 +294,9 @@ class MusicBot:
         with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
             try:
                 info = ydl.extract_info(video_url, download=False)
+                if not info:
+                    logger.error(f"No info extracted from {video_url}")
+                    return None, None, 0
                 formats = info.get("formats", [])
                 audio_formats = [f for f in formats if f.get("acodec") != "none" and f.get("vcodec") == "none"]
                 if audio_formats:
