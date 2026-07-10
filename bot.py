@@ -83,8 +83,10 @@ class MusicBot:
             cookie_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
 
             # Convert JSON to Netscape format if needed
-            youtube_cookies = youtube_cookies.strip()
-            if youtube_cookies.startswith('['):
+            # Remove whitespace and check if it starts with [
+            youtube_cookies_stripped = youtube_cookies.strip()
+            is_json = youtube_cookies_stripped.startswith('[')
+            if is_json:
                 try:
                     cookies = json.loads(youtube_cookies)
                     # Write Netscape format header
@@ -102,9 +104,10 @@ class MusicBot:
                         value = cookie.get("value", "")
                         cookie_file.write(f"{domain}\tTRUE\t{path}\t{secure}\t{expiration}\t{name}\t{value}\n")
                     logger.info(f"YouTube cookies loaded: {len(cookies)} cookies converted to Netscape format")
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON decode error, falling back to raw: {e}")
                     cookie_file.write(youtube_cookies)
-                    logger.info("YouTube cookies loaded as raw Netscape format")
+                    logger.info("YouTube cookies loaded as raw Netscape format (fallback)")
             else:
                 cookie_file.write(youtube_cookies)
                 logger.info("YouTube cookies loaded as raw Netscape format")
