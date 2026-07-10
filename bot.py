@@ -56,66 +56,31 @@ class MusicBot:
         yt_dlp.utils.bug_reports_message = lambda **kwargs: ""
         logger.info(f"bug_reports_message after: {yt_dlp.utils.bug_reports_message}")
 
-        self.ydl_opts = {
+        self.ydl_opts = self._get_ydl_opts()
+        self.web_app = self._setup_web_app()
+
+    def _get_ydl_opts(self):
+        """Get yt-dlp options using Android client to bypass bot detection."""
+        return {
             "format": "bestaudio/best",
             "quiet": True,
             "no_warnings": True,
             "extract_flat": False,
             "skip_download": True,
             "noplaylist": True,
-            "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
-                "Accept-Encoding": "gzip, deflate",
-                "DNT": "1",
-                "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
+            # Use Android client - bypasses YouTube bot detection on data center IPs
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "web"],
+                    "player_skip": ["configs", "webpage"],
+                }
             },
             "extractor_retries": 3,
             "ignoreerrors": True,
         }
 
-        # YouTube cookies support (Netscape format or JSON from env var)
-        youtube_cookies = os.getenv("YOUTUBE_COOKIES")
-        if youtube_cookies:
-            import tempfile
-            cookie_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-
-            # Convert JSON to Netscape format if needed
-            # Remove whitespace and check if it starts with [
-            youtube_cookies_stripped = youtube_cookies.strip()
-            is_json = youtube_cookies_stripped.startswith('[')
-            if is_json:
-                try:
-                    cookies = json.loads(youtube_cookies)
-                    # Write Netscape format header
-                    cookie_file.write("# Netscape HTTP Cookie File\n")
-                    for cookie in cookies:
-                        domain = cookie.get("domain", ".youtube.com")
-                        # Ensure domain starts with dot for Netscape format
-                        if not domain.startswith('.'):
-                            domain = '.' + domain
-                        path = cookie.get("path", "/")
-                        secure = "TRUE" if cookie.get("secure") else "FALSE"
-                        http_only = "TRUE" if cookie.get("httpOnly") else "FALSE"
-                        expiration = str(int(cookie.get("expirationDate", 0))) if cookie.get("expirationDate") else "0"
-                        name = cookie.get("name", "")
-                        value = cookie.get("value", "")
-                        cookie_file.write(f"{domain}\tTRUE\t{path}\t{secure}\t{expiration}\t{name}\t{value}\n")
-                    logger.info(f"YouTube cookies loaded: {len(cookies)} cookies converted to Netscape format")
-                except json.JSONDecodeError as e:
-                    logger.error(f"JSON decode error, falling back to raw: {e}")
-                    cookie_file.write(youtube_cookies)
-                    logger.info("YouTube cookies loaded as raw Netscape format (fallback)")
-            else:
-                cookie_file.write(youtube_cookies)
-                logger.info("YouTube cookies loaded as raw Netscape format")
-
-            cookie_file.close()
-            self.ydl_opts["cookiefile"] = cookie_file.name
-
-        # FastAPI app for Render health checks
+    # FastAPI app for Render health checks
+    def _setup_web_app(self):
         self.web_app = FastAPI(lifespan=self._lifespan)
 
         @self.web_app.get("/health")
@@ -125,6 +90,8 @@ class MusicBot:
         @self.web_app.get("/")
         async def root():
             return PlainTextResponse("Music Bot Running")
+
+        return self.web_app
 
     @asynccontextmanager
     async def _lifespan(self, app: FastAPI):
