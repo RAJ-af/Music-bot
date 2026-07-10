@@ -7,3 +7,5 @@ ytmusicapi>=1.5.0
 pyrofork>=2.3
 tgcrypto>=1.2.0
 py-tgcalls
+fastapi>=0.100.0
+uvicorn>=0.23.0

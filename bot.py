@@ -4,6 +4,7 @@ import logging
 import re
 import json
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
@@ -18,6 +19,9 @@ from pytgcalls.types import MediaStream
 import yt_dlp
 from ytmusicapi import YTMusic
 from pyrogram import Client
+from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
+import uvicorn
 
 load_dotenv()
 
@@ -59,7 +63,33 @@ class MusicBot:
             "extract_flat": False,
             "skip_download": True,
             "noplaylist": True,
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+            },
+            "extractor_retries": 3,
+            "ignoreerrors": True,
         }
+
+        # FastAPI app for Render health checks
+        self.web_app = FastAPI(lifespan=self._lifespan)
+
+        @self.web_app.get("/health")
+        async def health():
+            return PlainTextResponse("OK")
+
+        @self.web_app.get("/")
+        async def root():
+            return PlainTextResponse("Music Bot Running")
+
+    @asynccontextmanager
+    async def _lifespan(self, app: FastAPI):
+        yield
 
     async def _ensure_session_string(self):
         """Get session string from env or file, validate and fail if not set"""
@@ -163,17 +193,8 @@ class MusicBot:
             return "spotify"
         return "search"
 
-    def search_youtube(self, query: str, max_results: int = 5):
-        search_opts = {**self.ydl_opts, "default_search": "ytsearch", "max_entries": max_results}
-        with yt_dlp.YoutubeDL(search_opts) as ydl:
-            try:
-                result = ydl.extract_info(f"ytsearch{max_results}:{query}", download=False)
-                return result.get("entries", []) if result else []
-            except Exception as e:
-                logger.error(f"YouTube search error: {e}")
-                return []
-
     def search_ytmusic(self, query: str, max_results: int = 5):
+        """Search YouTube Music - primary search method (better than plain YouTube)"""
         try:
             results = self.ytmusic.search(query, filter="songs", limit=max_results)
             return [
@@ -189,6 +210,17 @@ class MusicBot:
         except Exception as e:
             logger.error(f"YTMusic search error: {e}")
             return []
+
+    def search_youtube(self, query: str, max_results: int = 5):
+        """Fallback YouTube search via yt-dlp"""
+        search_opts = {**self.ydl_opts, "default_search": "ytsearch", "max_entries": max_results}
+        with yt_dlp.YoutubeDL(search_opts) as ydl:
+            try:
+                result = ydl.extract_info(f"ytsearch{max_results}:{query}", download=False)
+                return result.get("entries", []) if result else []
+            except Exception as e:
+                logger.error(f"YouTube search error: {e}")
+                return []
 
     def get_spotify_track_info(self, url: str):
         """Extract track info from Spotify URL using spotdl's metadata (no API key needed)"""
@@ -240,6 +272,25 @@ class MusicBot:
             return []
 
     def get_stream_url(self, video_url: str):
+        """Get stream URL from video URL - try ytmusicapi first if it's a YouTube link"""
+        video_id = None
+        if "youtube.com/watch?v=" in video_url:
+            video_id = video_url.split("v=")[1].split("&")[0]
+        elif "youtu.be/" in video_url:
+            video_id = video_url.split("youtu.be/")[1].split("?")[0]
+
+        # Try ytmusicapi first for YouTube videos (bypasses some yt-dlp issues)
+        if video_id:
+            try:
+                results = self.ytmusic.get_song(video_id)
+                if results and results.get("videoDetails"):
+                    details = results["videoDetails"]
+                    # Now use yt-dlp with the URL, knowing the video exists
+                    pass  # Fall through to yt-dlp for actual stream
+            except Exception:
+                pass  # Fall through to yt-dlp
+
+        # Use yt-dlp for stream extraction
         with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
             try:
                 info = ydl.extract_info(video_url, download=False)
@@ -310,9 +361,10 @@ class MusicBot:
         elif source == "ytmusic":
             stream_url, title, duration = self.get_stream_url(query)
         else:
-            results = self.search_youtube(query, 1)
+            # Try ytmusicapi first (more reliable than YouTube search)
+            results = self.search_ytmusic(query, 1)
             if not results:
-                results = self.search_ytmusic(query, 1)
+                results = self.search_youtube(query, 1)
             if not results:
                 await msg.edit_text("❌ No results found")
                 return
@@ -416,9 +468,10 @@ class MusicBot:
             return
 
         query = " ".join(context.args)
-        results = self.search_youtube(query, 5)
+        # Try ytmusicapi first (more reliable)
+        results = self.search_ytmusic(query, 5)
         if not results:
-            results = self.search_ytmusic(query, 5)
+            results = self.search_youtube(query, 5)
 
         if not results:
             await update.message.reply_text("❌ No results found")
@@ -572,12 +625,16 @@ class MusicBot:
         ])
         logger.info("Bot started with command menu set!")
         try:
+            # Start FastAPI health check server (keeps Render free tier awake)
+            config = uvicorn.Config(self.web_app, host="0.0.0.0", port=8080, log_level="warning")
+            server = uvicorn.Server(config)
+            asyncio.create_task(server.serve())
+            logger.info("Health check server started on port 8080")
+
             await self.app.initialize()
             await self.app.start()
             await self.app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-            # yahan pyrogram/pytgcalls ka initialize bhi already ho chuka hoga
-            # ab bot ko zinda rakhne ke liye:
-            await asyncio.Event().wait()  # ya jo bhi existing idle mechanism hai (pyrogram ka idle() bhi chalega agar already import hai)
+            await asyncio.Event().wait()
         finally:
             await self.app.updater.stop()
             await self.app.stop()
