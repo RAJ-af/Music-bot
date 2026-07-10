@@ -229,8 +229,8 @@ class MusicBot:
             return "spotify"
         return "search"
 
-    def search_ytmusic(self, query: str, max_results: int = 5):
-        """Search YouTube Music - primary search method (better than plain YouTube)"""
+    def _search_ytmusic_sync(self, query: str, max_results: int = 5):
+        """Synchronous YTMusic search - run in executor with timeout"""
         try:
             results = self.ytmusic.search(query, filter="songs", limit=max_results)
             return [
@@ -247,8 +247,23 @@ class MusicBot:
             logger.error(f"YTMusic search error: {e}")
             return []
 
-    def search_youtube(self, query: str, max_results: int = 5):
-        """Fallback YouTube search via yt-dlp"""
+    async def search_ytmusic(self, query: str, max_results: int = 5, timeout: int = 10):
+        """Search YouTube Music with timeout"""
+        loop = asyncio.get_event_loop()
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(None, self._search_ytmusic_sync, query, max_results),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"YTMusic search timeout for: {query}")
+            return []
+        except Exception as e:
+            logger.error(f"YTMusic search error: {e}")
+            return []
+
+    def _search_youtube_sync(self, query: str, max_results: int = 5):
+        """Synchronous YouTube search via yt-dlp - run in executor with timeout"""
         search_opts = {**self.ydl_opts, "default_search": "ytsearch", "max_entries": max_results}
         with yt_dlp.YoutubeDL(search_opts) as ydl:
             try:
@@ -257,6 +272,21 @@ class MusicBot:
             except Exception as e:
                 logger.error(f"YouTube search error: {e}")
                 return []
+
+    async def search_youtube(self, query: str, max_results: int = 5, timeout: int = 10):
+        """Fallback YouTube search via yt-dlp with timeout"""
+        loop = asyncio.get_event_loop()
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(None, self._search_youtube_sync, query, max_results),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"YouTube search timeout for: {query}")
+            return []
+        except Exception as e:
+            logger.error(f"YouTube search error: {e}")
+            return []
 
     def get_spotify_track_info(self, url: str):
         """Extract track info from Spotify URL using spotdl's metadata (no API key needed)"""
@@ -388,7 +418,7 @@ class MusicBot:
         if source == "spotify":
             info = self.get_spotify_track_info(query)
             if info:
-                results = self.search_youtube(info["search_query"], 1)
+                results = await self.search_youtube(info["search_query"], 1)
                 if results:
                     stream_url, title, duration = self.get_stream_url(results[0]["webpage_url"])
                 else:
@@ -401,9 +431,9 @@ class MusicBot:
             stream_url, title, duration = self.get_stream_url(query)
         else:
             # Try ytmusicapi first (more reliable than YouTube search)
-            results = self.search_ytmusic(query, 1)
+            results = await self.search_ytmusic(query, 1)
             if not results:
-                results = self.search_youtube(query, 1)
+                results = await self.search_youtube(query, 1)
             if not results:
                 await msg.edit_text("❌ No results found")
                 return
@@ -508,9 +538,9 @@ class MusicBot:
 
         query = " ".join(context.args)
         # Try ytmusicapi first (more reliable)
-        results = self.search_ytmusic(query, 5)
+        results = await self.search_ytmusic(query, 5)
         if not results:
-            results = self.search_youtube(query, 5)
+            results = await self.search_youtube(query, 5)
 
         if not results:
             await update.message.reply_text("❌ No results found")
